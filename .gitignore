@@ -26,6 +26,8 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!arthsetu_xgb.pkl
+!clean_features.csv
 
 # 3. Python & Backend 
 __pycache__/
