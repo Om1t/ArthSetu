@@ -6,17 +6,14 @@ function CreditForm() {
     Savings_Balance: "",
     Expenses_Annual: "",
     Utility_Bill_Late_Count: "",
-    Credit_History_Length_Months: ""
+    Credit_History_Length_Months: "",
+    Age: "",
+    Gender: "Prefer not to say",
+    Region: "Urban",
+    Dependents: "0"
   });
 
-  const [errors, setErrors] = useState({
-    Income_Annual: "",
-    Savings_Balance: "",
-    Expenses_Annual: "",
-    Utility_Bill_Late_Count: "",
-    Credit_History_Length_Months: ""
-  });
-
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -30,25 +27,24 @@ function CreditForm() {
     },
     shap_explanations: {
       positive_factors: [
-        { feature: "Savings_Balance", impact: 0.15, message: "Significant impact from Savings Balance" },
-        { feature: "Credit_History_Length_Months", impact: 0.08, message: "Minor impact from Credit History" }
+        { feature: "Savings_Balance", impact: 0.15, message: "Significant positive impact" },
+        { feature: "Credit_History_Length_Months", impact: 0.08, message: "Steady positive impact" }
       ],
       negative_factors: [
-        { feature: "Spending_Ratio", impact: 0.22, message: "Significant impact from Spending Ratio" },
-        { feature: "Utility_Bill_Late_Count", impact: 0.40, message: "Critical impact from Late Bills" }
+        { feature: "Spending_Ratio", impact: 0.22, message: "High utilization drag" },
+        { feature: "Utility_Bill_Late_Count", impact: 0.40, message: "Critical penalty from late bills" }
       ]
     }
   };
 
   const validateInput = (name, value, currentData) => {
     const valNum = Number(value);
-    if (valNum < 0) return "Value cannot be negative.";
-    if (name === "Credit_History_Length_Months" && valNum > 1000) return "Value too high (80+ years).";
-    if (name === "Utility_Bill_Late_Count" && valNum > 50) return "Unrealistic late bill count.";
+    if (valNum < 0) return "Cannot be negative.";
+    if (name === "Credit_History_Length_Months" && valNum > 1000) return "Invalid timeframe.";
+    if (name === "Utility_Bill_Late_Count" && valNum > 50) return "Unrealistic late count.";
     if (name === "Income_Annual" && valNum > 1000000000) return "Unrealistic income.";
-    if (name === "Utility_Bill_Late_Count" || name === "Credit_History_Length_Months") {
-      if (value !== "" && !Number.isInteger(valNum)) return "Must be a whole number.";
-    }
+    if ((name === "Utility_Bill_Late_Count" || name === "Credit_History_Length_Months" || name === "Dependents" || name === "Age") && value !== "" && !Number.isInteger(valNum)) return "Must be a whole number.";
+    
     const inc = name === "Income_Annual" ? valNum : Number(currentData.Income_Annual);
     const sav = name === "Savings_Balance" ? valNum : Number(currentData.Savings_Balance);
     const exp = name === "Expenses_Annual" ? valNum : Number(currentData.Expenses_Annual);
@@ -77,8 +73,9 @@ function CreditForm() {
   const liveSavings = Number(formData.Savings_Balance);
   const liveRatio = liveIncome > 0 ? (liveExpenses / liveIncome).toFixed(3) : "0.000";
 
+  const requiredKeys = ["Income_Annual", "Savings_Balance", "Expenses_Annual", "Utility_Bill_Late_Count", "Credit_History_Length_Months", "Age", "Dependents"];
   const hasErrors = Object.values(errors).some(err => err !== "");
-  const isEmpty = Object.values(formData).some(val => val === "");
+  const isEmpty = requiredKeys.some(key => formData[key] === "");
   const isFormDisabled = hasErrors || isEmpty;
 
   const handleSubmit = async (e) => {
@@ -90,7 +87,11 @@ function CreditForm() {
       Savings_Balance: liveSavings,
       Spending_Ratio: Number(liveRatio),
       Utility_Bill_Late_Count: Number(formData.Utility_Bill_Late_Count),
-      Credit_History_Length_Months: Number(formData.Credit_History_Length_Months)
+      Credit_History_Length_Months: Number(formData.Credit_History_Length_Months),
+      Age: Number(formData.Age),
+      Gender: formData.Gender,
+      Region: formData.Region,
+      Dependents: Number(formData.Dependents)
     };
 
     setLoading(true);
@@ -100,7 +101,7 @@ function CreditForm() {
       const response = await fetch("http://127.0.0.1:8000/api/v1/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ applicant_id: "APP-123", financial_data: requestData })
+        body: JSON.stringify({ applicant_id: "APP-" + Math.floor(Math.random() * 10000), financial_data: requestData })
       });
       const data = await response.json();
       if (!response.ok) { setLoading(false); return; }
@@ -110,9 +111,7 @@ function CreditForm() {
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
-  };
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
 
   const assessment = result?.assessment;
   const shapExplanations = result?.shap_explanations || { positive_factors: [], negative_factors: [] };
@@ -121,9 +120,8 @@ function CreditForm() {
     ...(shapExplanations.negative_factors || []).map(f => ({ ...f, direction: 'negative' }))
   ].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 
-  const totalShapImpact = combinedShap.reduce((sum, item) => sum + Math.abs(item.impact), 0);
+  const totalShapImpact = combinedShap.reduce((sum, item) => sum + Math.abs(item.impact), 0) || 1;
 
-  // PRECISION LOAN ALGORITHM (Synced with Backend API)
   let displayLoanLimit = 0;
   let scoreValue = 0;
   if (assessment) {
@@ -131,27 +129,23 @@ function CreditForm() {
     displayLoanLimit = assessment.max_approval_limit || 0; 
   }
 
-  // --- NEW: DYNAMIC SCORE COLOR ENGINE ---
   const getScoreColorInfo = (score) => {
-    if (score >= 650) return { main: "#15803d", ring: "conic-gradient(from 0deg, #15803d, #4ade80, #15803d)" }; // Green
-    if (score >= 500) return { main: "#1d4ed8", ring: "conic-gradient(from 0deg, #1d4ed8, #60a5fa, #1d4ed8)" }; // Blue
-    if (score >= 400) return { main: "#d97706", ring: "conic-gradient(from 0deg, #d97706, #fbbf24, #d97706)" }; // Yellow
-    return { main: "#b91c1c", ring: "conic-gradient(from 0deg, #b91c1c, #f87171, #b91c1c)" }; // Red
+    if (score >= 650) return { main: "#15803d", ring: "conic-gradient(from 0deg, #15803d, #4ade80, #15803d)" };
+    if (score >= 500) return { main: "#1d4ed8", ring: "conic-gradient(from 0deg, #1d4ed8, #60a5fa, #1d4ed8)" };
+    if (score >= 400) return { main: "#d97706", ring: "conic-gradient(from 0deg, #d97706, #fbbf24, #d97706)" };
+    return { main: "#b91c1c", ring: "conic-gradient(from 0deg, #b91c1c, #f87171, #b91c1c)" };
   };
   const scoreColors = assessment ? getScoreColorInfo(scoreValue) : { main: "#0f172a", ring: "conic-gradient(from 0deg, #2563eb, #38bdf8, #2563eb)" };
 
   const getDynamicAdvice = (feature) => {
     const historyYears = (formData.Credit_History_Length_Months / 12).toFixed(1);
-
     switch(feature) {
-      case "Income_Annual": return `Your reported income of ${formatCurrency(liveIncome)} sets your baseline borrowing capacity. Consider declaring any secondary income sources.`;
-      case "Savings_Balance": return `A reserve of ${formatCurrency(liveSavings)} provides a buffer, but experts recommend keeping 3-6 months of expenses liquid.`;
-      case "Spending_Ratio": return `Your current lifestyle utilizes ${(liveRatio*100).toFixed(1)}% of your earnings. Lowering this ratio below 50% is the fastest way to improve your profile.`;
-      case "Utility_Bill_Late_Count": return `Our model detected ${formData.Utility_Bill_Late_Count} recent late payments. Consistency is heavily weighted. We strongly recommend enabling Auto-Pay.`;
-      case "Credit_History_Length_Months":
-        if (historyYears < 4) return `Your footprint is relatively new (${historyYears} years). Establishing a consistent track record will steadily increase your score.`;
-        return `You have a mature footprint of ${historyYears} years. To protect this metric, avoid closing your oldest active bank accounts.`;
-      default: return "Continue optimizing this financial metric to improve your overall profile.";
+      case "Income_Annual": return `Your reported income of ${formatCurrency(liveIncome)} sets your baseline capacity.`;
+      case "Savings_Balance": return `A reserve of ${formatCurrency(liveSavings)} provides a buffer. Aim for 3-6 months liquid.`;
+      case "Spending_Ratio": return `You utilize ${(liveRatio*100).toFixed(1)}% of earnings. Lowering this below 50% is critical.`;
+      case "Utility_Bill_Late_Count": return `Model detected ${formData.Utility_Bill_Late_Count} recent late payments. Enable Auto-Pay immediately.`;
+      case "Credit_History_Length_Months": return historyYears < 4 ? `Your footprint is new (${historyYears} yrs). Maintain active accounts.` : `Protect your mature ${historyYears} yr footprint by keeping oldest accounts open.`;
+      default: return "Continue optimizing this financial metric.";
     }
   };
 
@@ -164,9 +158,9 @@ function CreditForm() {
     const start = currentDeg;
     const end = currentDeg + deg;
     currentDeg += deg;
-    return `${featureColors[item.feature]} ${start}deg ${end}deg`;
+    return `${featureColors[item.feature] || '#94a3b8'} ${start}deg ${end}deg`;
   });
-  const pieBackground = `conic-gradient(${pieSlices.join(', ')})`;
+  const pieBackground = pieSlices.length > 0 ? `conic-gradient(${pieSlices.join(', ')})` : "#e2e8f0";
   const monthlyExpenses = liveExpenses / 12;
   const monthsOfSavings = monthlyExpenses > 0 ? (liveSavings / monthlyExpenses).toFixed(1) : "0.0";
 
@@ -174,19 +168,16 @@ function CreditForm() {
     <div style={styles.page}>
       <div style={styles.wrapper}>
         
-        {/* LEFT COLUMN */}
+        {/* LEFT COLUMN: FORM */}
         <div style={styles.left}>
           <div style={styles.topRow}>
             <div style={styles.logoContainer}>
-              <div style={styles.logoIcon}>
-                <div style={styles.logoIconInner}></div>
-              </div>
+              <div style={styles.logoIcon}><div style={styles.logoIconInner}></div></div>
               <div style={styles.logoTextWrapper}>
-                <span style={styles.logoTextMain}>Arth</span>
-                <span style={styles.logoTextSub}>Setu</span>
+                <span style={styles.logoTextMain}>Arth</span><span style={styles.logoTextSub}>Setu</span>
               </div>
             </div>
-            <div style={styles.badge}>Hack-o-hire prototype</div>
+            <div style={styles.badge}>Production Core</div>
           </div>
 
           <div style={styles.heroText}>
@@ -196,67 +187,76 @@ function CreditForm() {
           <div style={styles.card}>
             <h2 style={styles.sectionTitle}>Applicant Input</h2>
             <form onSubmit={handleSubmit} style={styles.form}>
-              <div style={styles.inputGroup}>
-                <div style={styles.labelRow}>
-                  <label style={styles.label}>Annual Income</label>
-                  <div className="custom-tooltip-wrapper">
-                    <span style={styles.infoIcon}>?</span>
-                    <div className="custom-tooltip-text">Your total yearly earnings from all sources before taxes.</div>
-                  </div>
+              
+              <div style={styles.inputGrid}>
+                <div style={styles.inputGroup}>
+                  <div style={styles.labelRow}><label style={styles.label}>Age</label></div>
+                  <input type="number" name="Age" value={formData.Age} onChange={handleChange} style={errors.Age ? styles.inputError : styles.input} />
+                  {errors.Age && <div style={styles.errorText}>{errors.Age}</div>}
                 </div>
-                <input type="number" name="Income_Annual" value={formData.Income_Annual} onChange={handleChange} required style={errors.Income_Annual ? styles.inputError : styles.input} />
+                <div style={styles.inputGroup}>
+                  <div style={styles.labelRow}>
+                    <label style={styles.label}>Gender</label>
+                    <div className="custom-tooltip-wrapper"><span style={styles.infoIconSmall}>?</span><div className="custom-tooltip-text">Isolated from ML to prevent redlining.</div></div>
+                  </div>
+                  <select name="Gender" value={formData.Gender} onChange={handleChange} style={styles.input}>
+                    <option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={styles.inputGrid}>
+                <div style={styles.inputGroup}>
+                  <div style={styles.labelRow}><label style={styles.label}>Region</label></div>
+                  <select name="Region" value={formData.Region} onChange={handleChange} style={styles.input}>
+                    <option value="Urban">Urban</option><option value="Semi-Urban">Semi-Urban</option><option value="Rural">Rural</option>
+                  </select>
+                </div>
+                <div style={styles.inputGroup}>
+                  <div style={styles.labelRow}><label style={styles.label}>Dependents</label></div>
+                  <input type="number" name="Dependents" value={formData.Dependents} onChange={handleChange} style={errors.Dependents ? styles.inputError : styles.input} />
+                  {errors.Dependents && <div style={styles.errorText}>{errors.Dependents}</div>}
+                </div>
+              </div>
+
+              <div style={styles.inputGroup}>
+                <div style={styles.labelRow}><label style={styles.label}>Annual Income</label></div>
+                <input type="number" name="Income_Annual" value={formData.Income_Annual} onChange={handleChange} style={errors.Income_Annual ? styles.inputError : styles.input} />
                 {errors.Income_Annual && <div style={styles.errorText}>{errors.Income_Annual}</div>}
               </div>
 
               <div style={styles.inputGroup}>
-                <div style={styles.labelRow}>
-                  <label style={styles.label}>Savings Balance</label>
-                  <div className="custom-tooltip-wrapper">
-                    <span style={styles.infoIcon}>?</span>
-                    <div className="custom-tooltip-text">Total liquid cash you currently have available in bank accounts.</div>
-                  </div>
-                </div>
-                <input type="number" name="Savings_Balance" value={formData.Savings_Balance} onChange={handleChange} required style={errors.Savings_Balance ? styles.inputError : styles.input} />
+                <div style={styles.labelRow}><label style={styles.label}>Savings Balance</label></div>
+                <input type="number" name="Savings_Balance" value={formData.Savings_Balance} onChange={handleChange} style={errors.Savings_Balance ? styles.inputError : styles.input} />
                 {errors.Savings_Balance && <div style={styles.errorText}>{errors.Savings_Balance}</div>}
               </div>
 
               <div style={styles.inputGroup}>
-                <div style={styles.labelRow}>
-                  <label style={styles.label}>Annual Expenses</label>
-                  <div className="custom-tooltip-wrapper">
-                    <span style={styles.infoIcon}>?</span>
-                    <div className="custom-tooltip-text">Your estimated total yearly spending, including rent, food, and lifestyle.</div>
-                  </div>
-                </div>
-                <input type="number" name="Expenses_Annual" value={formData.Expenses_Annual} onChange={handleChange} required style={errors.Expenses_Annual ? styles.inputError : styles.input} />
+                <div style={styles.labelRow}><label style={styles.label}>Annual Expenses</label></div>
+                <input type="number" name="Expenses_Annual" value={formData.Expenses_Annual} onChange={handleChange} style={errors.Expenses_Annual ? styles.inputError : styles.input} />
                 {formData.Income_Annual && formData.Expenses_Annual && !errors.Expenses_Annual && (
                   <div style={styles.liveCalcText}>↳ Calculated Spending Ratio: <span style={{fontWeight: 'bold', color: '#0284c7'}}>{liveRatio}</span></div>
                 )}
                 {errors.Expenses_Annual && <div style={styles.errorText}>{errors.Expenses_Annual}</div>}
               </div>
 
-              <div style={styles.inputGroup}>
-                <div style={styles.labelRow}>
-                  <label style={styles.label}>Utility Late Bill Count (Last 12 Months)</label>
-                  <div className="custom-tooltip-wrapper">
-                    <span style={styles.infoIcon}>?</span>
-                    <div className="custom-tooltip-text">How many times you missed a utility payment (electricity, water, etc.) recently.</div>
+              <div style={styles.inputGrid}>
+                  <div style={styles.inputGroup}>
+                    <div style={styles.labelRow}>
+                      <label style={styles.label}>Late Utility Bills</label>
+                      <div className="custom-tooltip-wrapper"><span style={styles.infoIconSmall}>?</span><div className="custom-tooltip-text">Missed payments in the last 12 months.</div></div>
+                    </div>
+                    <input type="number" name="Utility_Bill_Late_Count" value={formData.Utility_Bill_Late_Count} onChange={handleChange} style={errors.Utility_Bill_Late_Count ? styles.inputError : styles.input} />
+                    {errors.Utility_Bill_Late_Count && <div style={styles.errorText}>{errors.Utility_Bill_Late_Count}</div>}
                   </div>
-                </div>
-                <input type="number" name="Utility_Bill_Late_Count" value={formData.Utility_Bill_Late_Count} onChange={handleChange} required style={errors.Utility_Bill_Late_Count ? styles.inputError : styles.input} />
-                {errors.Utility_Bill_Late_Count && <div style={styles.errorText}>{errors.Utility_Bill_Late_Count}</div>}
-              </div>
-
-              <div style={styles.inputGroup}>
-                <div style={styles.labelRow}>
-                  <label style={styles.label}>Credit History Length (Months)</label>
-                  <div className="custom-tooltip-wrapper">
-                    <span style={styles.infoIcon}>?</span>
-                    <div className="custom-tooltip-text">How many months it has been since you opened your very first bank account or loan.</div>
+                  <div style={styles.inputGroup}>
+                    <div style={styles.labelRow}>
+                      <label style={styles.label}>Credit Hist (Mo)</label>
+                      <div className="custom-tooltip-wrapper"><span style={styles.infoIconSmall}>?</span><div className="custom-tooltip-text">Months since your first financial account was opened.</div></div>
+                    </div>
+                    <input type="number" name="Credit_History_Length_Months" value={formData.Credit_History_Length_Months} onChange={handleChange} style={errors.Credit_History_Length_Months ? styles.inputError : styles.input} />
+                    {errors.Credit_History_Length_Months && <div style={styles.errorText}>{errors.Credit_History_Length_Months}</div>}
                   </div>
-                </div>
-                <input type="number" name="Credit_History_Length_Months" value={formData.Credit_History_Length_Months} onChange={handleChange} required style={errors.Credit_History_Length_Months ? styles.inputError : styles.input} />
-                {errors.Credit_History_Length_Months && <div style={styles.errorText}>{errors.Credit_History_Length_Months}</div>}
               </div>
 
               <button type="submit" style={isFormDisabled ? styles.buttonDisabled : styles.button} disabled={loading || isFormDisabled}>
@@ -264,38 +264,27 @@ function CreditForm() {
               </button>
             </form>
           </div>
-
-          <div style={styles.trustBadge}>
-            <div>
-              <h3 style={styles.trustTitle}>Why Trust ArthSetu?</h3>
-              <p style={styles.trustText}>
-                Our proprietary XGBoost risk engine operates at an enterprise-grade <strong>Accuracy of 91.83% and AUC-ROC of 0.8316</strong>. We outperform traditional bureaus by identifying reliable "thin-file" borrowers through behavioral metrics.
-              </p>
-            </div>
-          </div>
-          <div style={styles.footerText}>
-            Bank-grade 256-bit encryption. ArthSetu is a financial technology company, not a bank.
-          </div>
+          <div style={styles.footerText}>Bank-grade 256-bit encryption active.</div>
         </div>
 
-        {/* RIGHT COLUMN */}
+        {/* RIGHT COLUMN: DASHBOARD */}
         <div style={styles.right}>
           <div style={styles.resultCard}>
             <div style={styles.headerRow}>
-              <h2 style={styles.sectionTitle}>Dashboard & Assessment</h2>
+              <h2 style={styles.sectionTitle}>Intelligence Dashboard</h2>
             </div>
 
             {loading && (
               <div style={styles.loading}>
                 <div style={styles.spinner}></div>
-                <p style={styles.loadingTitle}>ArthSetu AI is processing your data...</p>
+                <p style={styles.loadingTitle}>ArthSetu AI is analyzing profile...</p>
               </div>
             )}
 
             {!assessment && !loading && (
               <div style={styles.emptyState}>
                 <p style={styles.emptyTitle}>Dashboard Locked</p>
-                <p style={{color: "#64748b", fontSize: "14px", maxWidth: "300px", margin: "0 auto"}}>Fill out the secure form and click Evaluate to generate your comprehensive risk profile.</p>
+                <p style={{color: "#64748b", fontSize: "14px", maxWidth: "300px", margin: "0 auto"}}>Input variables on the left and evaluate to generate predictive metrics.</p>
               </div>
             )}
 
@@ -303,7 +292,6 @@ function CreditForm() {
               <div style={styles.resultsWrap}>
                 <div style={styles.topResultGrid}>
                   
-                  {/* CREDIT SCORE CARD WITH DYNAMIC COLORS */}
                   <div style={styles.scoreCard}>
                     <div style={{ ...styles.scoreRing, background: scoreColors.ring }}>
                       <div style={styles.scoreRingInner}>
@@ -321,7 +309,7 @@ function CreditForm() {
                     <div style={{...styles.probAmount, color: assessment.probability_of_default > 0.4 ? "#dc2626" : "#059669"}}>
                       {(assessment.probability_of_default * 100).toFixed(1)}%
                     </div>
-                    <p style={styles.probSubtext}>AI calculated probability of loan default.</p>
+                    <p style={styles.probSubtext}>AI calculated probability of default.</p>
                   </div>
 
                   <div style={styles.loanCard}>
@@ -330,54 +318,40 @@ function CreditForm() {
                       {displayLoanLimit > 0 ? formatCurrency(displayLoanLimit) : "0"}
                     </div>
                     <p style={styles.loanSubtext}>
-                      {displayLoanLimit > 0 ? "Eligible based on your risk profile." : "Increase score to unlock limits."}
+                      {displayLoanLimit > 0 ? "Eligible based on risk profile." : "Increase score to unlock."}
                     </p>
                   </div>
                 </div>
 
-                {/* UPDATED HEALTH INDICATORS WITH TOOLTIPS */}
                 <div style={styles.factsCard}>
                   <h3 style={styles.insightsTitle}>Financial Health Indicators</h3>
                   <div style={styles.factGrid}>
-                    
                     <div style={styles.factBox}>
                       <div style={styles.factBoxHeader}>
                         <strong>Net Savings</strong>
-                        <div className="custom-tooltip-wrapper">
-                          <span style={styles.infoIconSmall}>?</span>
-                          <div className="custom-tooltip-text">The amount of money left over annually after deducting total expenses from income.</div>
-                        </div>
+                        <div className="custom-tooltip-wrapper"><span style={styles.infoIconSmall}>?</span><div className="custom-tooltip-text">Annual remainder after expenses.</div></div>
                       </div>
                       <div>{formatCurrency(liveIncome - liveExpenses)} / year</div>
                     </div>
-
                     <div style={styles.factBox}>
                       <div style={styles.factBoxHeader}>
                         <strong>Emergency Fund</strong>
-                        <div className="custom-tooltip-wrapper">
-                          <span style={styles.infoIconSmall}>?</span>
-                          <div className="custom-tooltip-text">Estimated months you can sustain your current lifestyle using only your liquid savings.</div>
-                        </div>
+                        <div className="custom-tooltip-wrapper"><span style={styles.infoIconSmall}>?</span><div className="custom-tooltip-text">Months sustained by liquid savings.</div></div>
                       </div>
                       <div>{monthsOfSavings} months covered</div>
                     </div>
-
                     <div style={styles.factBox}>
                       <div style={styles.factBoxHeader}>
                         <strong>Credit History</strong>
-                        <div className="custom-tooltip-wrapper">
-                          <span style={styles.infoIconSmall}>?</span>
-                          <div className="custom-tooltip-text">Total time you have been building a track record of financial responsibility.</div>
-                        </div>
+                        <div className="custom-tooltip-wrapper"><span style={styles.infoIconSmall}>?</span><div className="custom-tooltip-text">Total track record length.</div></div>
                       </div>
                       <div>{(formData.Credit_History_Length_Months / 12).toFixed(1)} years</div>
                     </div>
-
                   </div>
                 </div>
 
                 <div style={styles.chartContainer}>
-                  <h3 style={styles.insightsTitle}>Key Score Factors</h3>
+                  <h3 style={styles.insightsTitle}>Key Predictive Factors</h3>
                   <div style={styles.aiExplainerGrid}>
                     <div style={styles.pieCol}>
                       <div style={styles.pieChartContainer}>
@@ -407,18 +381,18 @@ function CreditForm() {
                 </div>
 
                 <div style={styles.actionCard}>
-                  <h3 style={styles.actionTitle}>Your Custom Action Plan</h3>
+                  <h3 style={styles.actionTitle}>Strategic Action Plan</h3>
                   <ul style={styles.actionList}>
                     {combinedShap
                       .filter(item => item.direction === 'negative' && item.impact !== 0)
                       .slice(0, 3)
                       .map((item, idx) => (
                         <li key={idx} style={styles.actionListItem}>
-                          <strong>Target {item.feature.replace(/_/g, " ")}:</strong> {getDynamicAdvice(item.feature)}
+                          <strong>Optimize {item.feature.replace(/_/g, " ")}:</strong> {getDynamicAdvice(item.feature)}
                         </li>
                     ))}
                     {combinedShap.filter(item => item.direction === 'negative' && item.impact !== 0).length === 0 && (
-                      <li style={styles.actionListItem}>Keep up the great work! Your financial habits are exceptionally healthy.</li>
+                      <li style={styles.actionListItem}>Profile optimized. Maintain current trajectory.</li>
                     )}
                   </ul>
                 </div>
@@ -449,31 +423,29 @@ const styles = {
   heroText: { display: "flex", flexDirection: "column", gap: "6px" },
   title: { color: "#ffffff", fontSize: "38px", fontWeight: "800", lineHeight: "1.05", margin: "0 0 10px 0", textShadow: "0 2px 10px rgba(0,0,0,0.2)" },
   card: { background: "rgba(255,255,255,0.98)", padding: "30px", borderRadius: "24px", boxShadow: "0 20px 60px rgba(0,0,0,0.22)" },
-  resultCard: { background: "rgba(255,255,255,0.98)", padding: "30px", borderRadius: "24px", boxShadow: "0 20px 60px rgba(0,0,0,0.22)", width: "100%", transition: "all 0.3s ease" },
+  resultCard: { background: "rgba(255,255,255,0.98)", padding: "30px", borderRadius: "24px", boxShadow: "0 20px 60px rgba(0,0,0,0.22)", width: "100%", transition: "all 0.3s ease", display: "flex", flexDirection: "column" },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
   sectionTitle: { margin: 0, color: "#0f172a", fontSize: "22px", fontWeight: "800", letterSpacing: "-0.02em" },
   form: { display: "flex", flexDirection: "column", gap: "16px" },
+  inputGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" },
   inputGroup: { display: "flex", flexDirection: "column", gap: "6px" },
   labelRow: { display: "flex", alignItems: "center", gap: "8px" },
   label: { fontSize: "14px", fontWeight: "700", color: "#334155" },
-  infoIcon: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "#e2e8f0", color: "#64748b", fontSize: "10px", fontWeight: "800", cursor: "help" },
   infoIconSmall: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0", color: "#64748b", fontSize: "9px", fontWeight: "800", cursor: "help" },
-  input: { padding: "14px 16px", borderRadius: "12px", border: "1px solid #dbe3ef", fontSize: "15px", background: "#f8fafc", color: "#0f172a", outline: "none", fontWeight: "600", transition: "border 0.2s ease, box-shadow 0.2s ease" },
-  inputError: { padding: "14px 16px", borderRadius: "12px", border: "2px solid #ef4444", fontSize: "15px", background: "#fef2f2", color: "#991b1b", outline: "none", fontWeight: "600" },
+  input: { padding: "14px 16px", borderRadius: "12px", border: "1px solid #dbe3ef", fontSize: "15px", background: "#f8fafc", color: "#0f172a", outline: "none", fontWeight: "600", transition: "border 0.2s ease", width: "100%", boxSizing: "border-box" },
+  inputError: { padding: "14px 16px", borderRadius: "12px", border: "2px solid #ef4444", fontSize: "15px", background: "#fef2f2", color: "#991b1b", outline: "none", fontWeight: "600", width: "100%", boxSizing: "border-box" },
   errorText: { color: "#dc2626", fontSize: "12px", fontWeight: "700", paddingLeft: "4px" },
   liveCalcText: { color: "#475569", fontSize: "12px", fontWeight: "600", paddingLeft: "4px", marginTop: "2px" },
   button: { marginTop: "12px", padding: "16px", background: "linear-gradient(90deg, #2563eb, #0ea5e9)", color: "#ffffff", border: "none", borderRadius: "14px", fontWeight: "800", fontSize: "16px", cursor: "pointer", boxShadow: "0 10px 25px rgba(37,99,235,0.3)", transition: "transform 0.1s ease" },
   buttonDisabled: { marginTop: "12px", padding: "16px", background: "#94a3b8", color: "#f1f5f9", border: "none", borderRadius: "14px", fontWeight: "800", fontSize: "16px", cursor: "not-allowed", opacity: 0.7 },
-  trustBadge: { background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)", borderRadius: "20px", padding: "20px", display: "flex", gap: "16px", alignItems: "flex-start", marginTop: "10px", backdropFilter: "blur(12px)" },
-  trustTitle: { margin: "0 0 6px 0", color: "#ffffff", fontSize: "16px", fontWeight: "800" },
-  trustText: { margin: 0, color: "rgba(255, 255, 255, 0.85)", fontSize: "13px", lineHeight: "1.6" },
-  footerText: { color: "rgba(255,255,255,0.5)", fontSize: "11px", textAlign: "center", marginTop: "auto", paddingTop: "10px", lineHeight: "1.5" },
+  footerText: { color: "rgba(255,255,255,0.5)", fontSize: "12px", paddingLeft: "4px" },
 
-  loading: { minHeight: "420px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" },
+  loading: { flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minHeight: "400px" },
   spinner: { width: "48px", height: "48px", border: "4px solid #bfdbfe", borderTop: "4px solid #2563eb", borderRadius: "50%", animation: "spin 1s linear infinite", marginBottom: "18px" },
   loadingTitle: { fontSize: "18px", fontWeight: "800", color: "#0f172a" },
-  emptyState: { minHeight: "420px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" },
+  emptyState: { flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center", minHeight: "400px" },
   emptyTitle: { fontSize: "20px", fontWeight: "800", color: "#0f172a", marginBottom: "8px" },
+  
   resultsWrap: { display: "flex", flexDirection: "column", gap: "20px" },
   topResultGrid: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" },
   scoreCard: { background: "linear-gradient(135deg, #eff6ff, #dbeafe)", border: "1px solid #bfdbfe", borderRadius: "20px", padding: "20px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 15px rgba(0,0,0,0.03)" },
@@ -486,7 +458,6 @@ const styles = {
   probLabel: { fontSize: "12px", color: "#475569", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px" },
   probAmount: { fontSize: "36px", fontWeight: "800", marginBottom: "8px" },
   probSubtext: { fontSize: "11px", color: "#64748b", margin: 0, lineHeight: "1.4" },
-
   loanCard: { background: "linear-gradient(135deg, #f0fdf4, #dcfce7)", border: "1px solid #86efac", borderRadius: "20px", padding: "20px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center", boxShadow: "0 4px 15px rgba(0,0,0,0.03)" },
   loanLabel: { fontSize: "12px", color: "#166534", fontWeight: "800", textTransform: "uppercase", marginBottom: "4px" },
   loanAmount: { fontSize: "32px", fontWeight: "800", color: "#15803d", marginBottom: "8px" },

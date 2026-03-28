@@ -1,10 +1,16 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict
+from typing import List, Dict, Any
 
+# 1. INPUT SCHEMAS
 class CreditEvaluationRequest(BaseModel):
     applicant_id: str = Field(..., description="Unique identifier")
-    financial_data: Dict[str, float]
+    # MUST be Any to accept strings like Gender="Male" and Region="Urban"
+    financial_data: Dict[str, Any]
 
+class ChatRequest(BaseModel):
+    message: str
+
+# 2. OUTPUT SCHEMAS
 class ShapFactor(BaseModel):
     feature: str
     impact: float

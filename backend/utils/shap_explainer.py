@@ -23,7 +23,7 @@ def generate_shap_explanations(model, input_df: pd.DataFrame):
         if round(absolute_impact, 4) == 0:
             continue
             
-        # 2. Generate a UI-safe relative magnitude message instead of fake percentages
+        # 2. Generate a UI-safe relative magnitude message
         if absolute_impact > 1.0:
             magnitude = "Critical impact"
         elif absolute_impact > 0.4:
@@ -43,7 +43,7 @@ def generate_shap_explanations(model, input_df: pd.DataFrame):
         else:
             positive_factors.append(factor)
             
-    # 3. Sort by magnitude descending so the UI shows the most important drivers first
+    # 3. Sort by magnitude descending
     positive_factors = sorted(positive_factors, key=lambda x: x["impact"], reverse=True)
     negative_factors = sorted(negative_factors, key=lambda x: x["impact"], reverse=True)
             
