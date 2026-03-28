@@ -1,25 +1,8 @@
-# OS & IDEs
-.DS_Store
-.vscode/
-.idea/
-*.swp
-
-# Git
-.git/
-.gitignore
-
-# Environments & Caches
 __pycache__/
 *.py[cod]
-.pytest_cache/
 venv/
 env/
 .venv/
-
-# Data & Models (Pulled from S3 at runtime)
-*.csv
-*.parquet
-
-
-# Secrets
 .env
+Dockerfile
+.dockerignore

@@ -5,7 +5,7 @@ import joblib
 import pandas as pd
 import traceback
 import os
-import hashlib  # NEW: For the 256-bit Security Hook
+import hashlib  # For the 256-bit Security Hook
 
 from utils.shap_explainer import generate_shap_explanations
 from schemas import CreditEvaluationRequest, CreditEvaluationResponse
@@ -35,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- NEW: SECURITY HOOK FUNCTION ---
+# --- SECURITY HOOK FUNCTION ---
 def apply_aes256_hashing(pii_data: str):
     """Generates a 256-bit hash to protect user identity (SRS 3.3)."""
     return hashlib.sha256(pii_data.encode()).hexdigest()
@@ -43,8 +43,7 @@ def apply_aes256_hashing(pii_data: str):
 @app.post("/api/v1/evaluate", response_model=CreditEvaluationResponse)
 async def evaluate(request: CreditEvaluationRequest):
     try:
-        # 1. SECURITY HOOK: Mask Applicant ID immediately
-        # This justifies your "256 Encryption" dashboard label
+        # 1. SECURITY HOOK
         masked_id = apply_aes256_hashing(request.applicant_id)
         print(f"🔒 Processing Secure Request for Hash: {masked_id}")
 
@@ -55,35 +54,41 @@ async def evaluate(request: CreditEvaluationRequest):
         # 3. AI INFERENCE
         probability = float(model.predict_proba(df)[0][1])
         
-        # 4. PRELIMINARY ASSESSMENT
+        # 4. DYNAMIC PRELIMINARY ASSESSMENT
+        annual_income = input_data.get('Income_Annual', 0)
+
         if probability < 0.3:
             risk = "Low Risk"
             score = int(900 - (probability * 300))
-            limit = 300000
+            # Low Risk: Up to 60% of Annual Income, Capped at ₹15,00,000
+            limit = min(int(annual_income * 0.60), 1500000)
+            
         elif probability <= 0.7:
             risk = "Medium Risk"
             score = int(700 - (probability * 200))
-            limit = 100000
+            # Medium Risk: Up to 20% of Annual Income, Capped at ₹3,00,000
+            limit = min(int(annual_income * 0.20), 300000)
+            
         else:
             risk = "High Risk"
             score = int(500 - (probability * 200))
             limit = 0
 
         # 5. BUSINESS LOGIC GUARDRAIL (The "Killswitch")
-        # If Spending Ratio is > 0.9 (90%), we override the AI score
         if input_data.get('Spending_Ratio', 0) > 0.9:
             print(f"⚠️ GUARDRAIL TRIGGERED: High Debt-to-Income Ratio detected for {masked_id}")
             risk = "High Risk (Overridden)"
             limit = 0
-            score = min(score, 350) # Force a low score regardless of AI prediction
+            score = min(score, 350) 
 
         # 6. EXPLAINABILITY TIER
         try:
             shap_data = generate_shap_explanations(model, df)
         except Exception as shap_error:
+            print(f"SHAP Error: {shap_error}")
             shap_data = {
-                "positive_factors": [{"feature": "Income_Annual", "impact": 0.12, "message": "Stable Income Detected"}],
-                "negative_factors": [{"feature": "Utility_Bill_Late_Count", "impact": 0.22, "message": "Late Payments Found"}]
+                "positive_factors": [],
+                "negative_factors": []
             }
 
         return {

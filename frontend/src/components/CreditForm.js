@@ -26,16 +26,16 @@ function CreditForm() {
       probability_of_default: 0.124,
       risk_category: "Low Risk",
       credit_score_equivalent: 742,
+      max_approval_limit: 300000
     },
     shap_explanations: {
       positive_factors: [
-        { feature: "Savings_Balance", impact: 0.15, message: "Savings helped." },
-        { feature: "Credit_History_Length_Months", impact: 0.08, message: "History helped." }
+        { feature: "Savings_Balance", impact: 0.15, message: "Significant impact from Savings Balance" },
+        { feature: "Credit_History_Length_Months", impact: 0.08, message: "Minor impact from Credit History" }
       ],
       negative_factors: [
-        { feature: "Spending_Ratio", impact: 0.22, message: "Spending hurt." },
-        { feature: "Utility_Bill_Late_Count", impact: 0.40, message: "Late bills hurt." },
-        { feature: "Income_Annual", impact: 0.05, message: "Income ratio impact." }
+        { feature: "Spending_Ratio", impact: 0.22, message: "Significant impact from Spending Ratio" },
+        { feature: "Utility_Bill_Late_Count", impact: 0.40, message: "Critical impact from Late Bills" }
       ]
     }
   };
@@ -123,15 +123,12 @@ function CreditForm() {
 
   const totalShapImpact = combinedShap.reduce((sum, item) => sum + Math.abs(item.impact), 0);
 
-  // PRECISION LOAN ALGORITHM
+  // PRECISION LOAN ALGORITHM (Synced with Backend API)
   let displayLoanLimit = 0;
   let scoreValue = 0;
   if (assessment) {
     scoreValue = assessment.credit_score_equivalent || 400;
-    if (liveIncome > liveExpenses) {
-      const riskModifier = scoreValue >= 600 ? (scoreValue / 850) * 1.427 : (scoreValue / 850) * 0.254;
-      displayLoanLimit = Math.floor((liveIncome - liveExpenses) * riskModifier);
-    }
+    displayLoanLimit = assessment.max_approval_limit || 0; 
   }
 
   // --- NEW: DYNAMIC SCORE COLOR ENGINE ---
@@ -333,7 +330,7 @@ function CreditForm() {
                       {displayLoanLimit > 0 ? formatCurrency(displayLoanLimit) : "0"}
                     </div>
                     <p style={styles.loanSubtext}>
-                      {displayLoanLimit > 0 ? "Eligible based on your free cash flow metrics." : "Increase score to unlock limits."}
+                      {displayLoanLimit > 0 ? "Eligible based on your risk profile." : "Increase score to unlock limits."}
                     </p>
                   </div>
                 </div>
@@ -396,7 +393,7 @@ function CreditForm() {
                             <div key={idx} style={styles.bar3dRow}>
                               <div style={styles.barLabel}>
                                 <span style={{fontWeight: '700', color: '#1e293b', fontSize: '12px'}}>{item.feature.replace(/_/g, " ")}</span>
-                                <span style={{color: isPos ? '#059669' : '#dc2626', fontSize: '11px', fontWeight: '800'}}>{isPos ? '+' : '-'}{percent}%</span>
+                                <span style={{color: isPos ? '#059669' : '#dc2626', fontSize: '11px', fontWeight: '800'}}>{item.message}</span>
                               </div>
                               <div style={styles.bar3dTrack}>
                                 <div style={{ ...styles.bar3dFill, width: `${Math.max(percent, 5)}%`, background: isPos ? 'linear-gradient(180deg, #34d399, #059669)' : 'linear-gradient(180deg, #f87171, #dc2626)'}}></div>
