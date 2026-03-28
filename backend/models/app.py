@@ -59,7 +59,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 3. LOAD ASSETS ---
-@st.cache_resource
+# @st.cache_resource
 def load_assets():
     base_path = os.path.dirname(os.path.abspath(__file__))
     model = joblib.load(os.path.join(base_path, 'arthsetu_xgb.pkl'))
@@ -80,7 +80,7 @@ page = st.sidebar.radio("Navigation", ["Risk Engine", "Audit History", "AI Assis
 # PAGE: RISK ENGINE
 # ==========================================
 if page == "Risk Engine":
-    st.title("🏦 Trust Index Assessment")
+    st.title("Trust Index Assessment TEST!!!")
     st.markdown("##### Bank-grade 256-bit encrypted risk analysis.")
 
     # Using a container instead of a form so the dropdowns react instantly
@@ -128,7 +128,7 @@ if page == "Risk Engine":
             st.error("❌ Identity verification incomplete.")
         else:
             # --- ML PROCESSING ---
-            penalty = 1 if (age < 25 or age > 65) else 0
+            penalty = 1 if (age < 25 or age >= 65) else 0
             
             input_df = pd.DataFrame(0, index=[0], columns=model_columns)
             input_df['Age'] = age
@@ -191,23 +191,48 @@ if page == "Risk Engine":
                     # Grab the actual number the user typed in!
                     actual_value = input_df[feature].iloc[0]
                     
-                    # Determine impact direction and generate English reasons
+                    # 🧠 EXACT MATCH LOGIC FOR CLEARER EXPLANATIONS
                     if impact > 0:
                         bar_color = "#f43f5e" # Red
                         msg = "Increased Risk"
-                        if "Late" in feature: reason = f"Having {actual_value} late bills hurt your Trust Index."
-                        elif "Savings" in feature: reason = f"Your savings balance of ₹{actual_value} was too low to offset risk."
-                        elif "Age" in feature: reason = f"Your age ({actual_value}) placed you in a statistically higher-risk bracket."
-                        elif "Income" in feature: reason = f"Your annual income of ₹{actual_value} limited your repayment capacity."
-                        else: reason = f"Your {clean_name} data negatively impacted your score."
+                        
+                        if feature == "Late_Bills": reason = f"Having {actual_value} late bill(s) hurt your Trust Index."
+                        elif feature == "Savings": reason = f"Your savings balance of ₹{actual_value} was too low to offset risk."
+                        
+                        # --- SMART AGE LOGIC (HIGH RISK) ---
+                        elif feature == "Age": 
+                            if actual_value >= 65:
+                                reason = f"Nearing retirement age ({actual_value}) statistically reduces future earning potential."
+                            else:
+                                reason = f"Your age ({actual_value}) placed you in a statistically higher-risk bracket."
+                        # ----------------------------------------
+                        
+                        elif feature == "Age_Penalty_Flag": reason = "Falling outside the prime borrowing age (25-64) triggered an automatic risk penalty." if actual_value == 1 else "Internal age demographics slightly increased risk."
+                        elif feature == "Income": reason = f"Your annual income of ₹{actual_value} limited your repayment capacity."
+                        elif "Area" in feature: reason = f"Residing in this location ({clean_name.replace('Area ', '')}) slightly increased your risk profile."
+                        elif "Occupation" in feature: reason = f"Your employment status ({clean_name.replace('Occupation ', '')}) carried a higher historical risk."
+                        else: reason = f"Your {clean_name} negatively impacted your score."
+                        
                     else:
                         bar_color = "#10b981" # Green
                         msg = "Lowered Risk"
-                        if "Late" in feature: reason = f"Having {actual_value} late bills (a clean record) boosted your score."
-                        elif "Savings" in feature: reason = f"Your healthy savings balance of ₹{actual_value} provided a strong safety net."
-                        elif "Age" in feature: reason = f"Your age ({actual_value}) placed you in a highly reliable demographic."
-                        elif "Income" in feature: reason = f"Your income of ₹{actual_value} demonstrated strong financial stability."
-                        else: reason = f"Your {clean_name} data positively improved your score."
+                        
+                        if feature == "Late_Bills": reason = f"Having only {actual_value} late bills showed strong financial responsibility."
+                        elif feature == "Savings": reason = f"Your savings balance of ₹{actual_value} provided a strong safety net."
+                        
+                        # --- SMART AGE LOGIC (LOW RISK) ---
+                        elif feature == "Age": 
+                            if actual_value >= 55:
+                                reason = f"Your mature credit history associated with your age ({actual_value}) stabilized your score."
+                            else:
+                                reason = f"Your age ({actual_value}) placed you in a highly reliable demographic."
+                        # ----------------------------------------
+                        
+                        elif feature == "Age_Penalty_Flag": reason = "Being in the prime borrowing age (25-64) stabilized your score."
+                        elif feature == "Income": reason = f"Your income of ₹{actual_value} demonstrated strong financial stability."
+                        elif "Area" in feature: reason = f"Residing in this location ({clean_name.replace('Area ', '')}) improved your risk profile."
+                        elif "Occupation" in feature: reason = f"Your employment status ({clean_name.replace('Occupation ', '')}) is historically highly reliable."
+                        else: reason = f"Your {clean_name} positively improved your score."
                         
                     width = min(abs(impact) * 25, 100) 
                     
