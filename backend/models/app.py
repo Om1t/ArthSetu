@@ -185,6 +185,53 @@ elif page == "Audit History":
     else:
         st.info("No applications processed yet.")
 
+# ==========================================
+# PAGE: AI ASSISTANT (Decoupled LLM Layer)
+# ==========================================
 elif page == "AI Assistant":
     st.title("🤖 AI Risk Analyst")
-    st.info("Switch to the Jupyter Notebook (03_chatbot.ipynb) to view the fully compliant air-gapped LLM, as requested by the Surprise Element Rubric.")
+    st.markdown("##### Powered by Local LLM (Air-gapped & Compliant)")
+    
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("E.g., 'Generate a decision letter for the last applicant'"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing Applicant Context Layer..."):
+                try:
+                    import ollama
+                    
+                    context_data = "No data available."
+                    if os.path.exists(AUDIT_LOG_FILE):
+                        df = pd.read_csv(AUDIT_LOG_FILE)
+                        context_data = df.tail(5).to_csv(index=False)
+
+                    system_prompt = f"""You are a senior credit analyst assistant. 
+                    You must ONLY reference the data provided in the context below. 
+                    If the required data isn't available, refuse to answer.
+                    
+                    CONTEXT LAYER (Recent Applicant Cards):
+                    {context_data}
+                    """
+
+                    response = ollama.chat(model='mistral', messages=[
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': prompt}
+                    ])
+                    
+                    msg = response['message']['content']
+                    st.markdown(msg)
+                    st.session_state.messages.append({"role": "assistant", "content": msg})
+
+                except ImportError:
+                    st.error("🚨 Ollama package missing. Run: `pip install ollama`")
+                except Exception as e:
+                    st.error(f"🚨 LLM Offline. Ensure Ollama app is running on this machine and the 'mistral' model is downloaded. Error: {e}")

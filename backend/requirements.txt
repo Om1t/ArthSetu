@@ -9,7 +9,9 @@ xgboost
 imbalanced-learn
 shap
 joblib
-python-multipart
+streamlit
+ollama
 requests
 jupyter
 ipykernel
+python-multipart
