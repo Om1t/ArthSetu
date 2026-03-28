@@ -5,20 +5,19 @@ import joblib
 import pandas as pd
 import traceback
 import os
-import hashlib  # For the 256-bit Security Hook
+import hashlib
 
 from utils.shap_explainer import generate_shap_explanations
 from schemas import CreditEvaluationRequest, CreditEvaluationResponse
 
 model = None
 
-# COMPLIANCE: Fail-fast startup manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model
     model_path = "models/arthsetu_xgb.pkl"
     if not os.path.exists(model_path):
-        raise RuntimeError(f"FATAL: Model artifact missing.")
+        raise RuntimeError(f"FATAL: Model artifact missing at {model_path}.")
     try:
         model = joblib.load(model_path)
         print("ArthSetu AI Engine loaded successfully.")
@@ -35,61 +34,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- SECURITY HOOK FUNCTION ---
 def apply_aes256_hashing(pii_data: str):
-    """Generates a 256-bit hash to protect user identity (SRS 3.3)."""
     return hashlib.sha256(pii_data.encode()).hexdigest()
 
 @app.post("/api/v1/evaluate", response_model=CreditEvaluationResponse)
 async def evaluate(request: CreditEvaluationRequest):
     try:
-        # 1. SECURITY HOOK
         masked_id = apply_aes256_hashing(request.applicant_id)
         print(f"🔒 Processing Secure Request for Hash: {masked_id}")
 
-        # 2. DATA PREPARATION
-        input_data = request.financial_data.model_dump()
+        input_data = request.financial_data
         df = pd.DataFrame([input_data])
         
-        # 3. AI INFERENCE
         probability = float(model.predict_proba(df)[0][1])
-        
-        # 4. DYNAMIC PRELIMINARY ASSESSMENT
-        annual_income = input_data.get('Income_Annual', 0)
+        annual_income = input_data.get('Income', 0)
 
         if probability < 0.3:
             risk = "Low Risk"
             score = int(900 - (probability * 300))
-            # Low Risk: Up to 60% of Annual Income, Capped at ₹15,00,000
             limit = min(int(annual_income * 0.60), 1500000)
-            
         elif probability <= 0.7:
             risk = "Medium Risk"
             score = int(700 - (probability * 200))
-            # Medium Risk: Up to 20% of Annual Income, Capped at ₹3,00,000
             limit = min(int(annual_income * 0.20), 300000)
-            
         else:
             risk = "High Risk"
             score = int(500 - (probability * 200))
             limit = 0
 
-        # 5. BUSINESS LOGIC GUARDRAIL (The "Killswitch")
-        if input_data.get('Spending_Ratio', 0) > 0.9:
-            print(f"⚠️ GUARDRAIL TRIGGERED: High Debt-to-Income Ratio detected for {masked_id}")
+        if input_data.get('Late_Bills', 0) > 5:
+            print(f"⚠️ GUARDRAIL TRIGGERED: High Late Bills detected for {masked_id}")
             risk = "High Risk (Overridden)"
             limit = 0
             score = min(score, 350) 
 
-        # 6. EXPLAINABILITY TIER
         try:
             shap_data = generate_shap_explanations(model, df)
         except Exception as shap_error:
             print(f"SHAP Error: {shap_error}")
-            shap_data = {
-                "positive_factors": [],
-                "negative_factors": []
-            }
+            shap_data = {"positive_factors": [], "negative_factors": []}
 
         return {
             "status": "success",
