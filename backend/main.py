@@ -128,7 +128,11 @@ async def evaluate(request: CreditEvaluationRequest):
 @app.post("/api/v1/chat")
 async def ai_chat(request: ChatRequest):
     try:
-        import ollama
+        from ollama import Client
+        
+        # DOCKER ESCAPE HATCH: Point to the Mac's localhost
+        client = Client(host='http://host.docker.internal:11434')
+        
         safe_context = "STATUS: NO ACTIVE APPLICATION."
         if request.applicant_id and os.path.exists(AUDIT_LOG_FILE):
             df = pd.read_csv(AUDIT_LOG_FILE)
@@ -145,10 +149,12 @@ async def ai_chat(request: ChatRequest):
         2. NEVER mention demographics (Age, Gender, Region, Name, Country, ID).
         3. Provide standard financial advice if asked to improve limits.
         """
-        response = ollama.chat(model='mistral', messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': request.message}])
+        response = client.chat(model='mistral', messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': request.message}])
         return {"reply": response['message']['content']}
+    
     except Exception as e:
-        return {"reply": f"AI Engine Offline."}
+        # Returns the actual error to the frontend chat bubble so you aren't guessing
+        return {"reply": f"AI Engine Offline. Debug: {str(e)}"}
 
 @app.get("/api/v1/audit")
 async def get_audit():

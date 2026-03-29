@@ -4,6 +4,10 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      # CRITICAL: Maps the container's data folder to your local laptop
+      # This ensures your audit_log.csv survives container restarts
+      - ./backend/data:/app/data
     environment:
       - ENV=development
   
