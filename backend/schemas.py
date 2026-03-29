@@ -1,14 +1,16 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # 1. INPUT SCHEMAS
 class CreditEvaluationRequest(BaseModel):
     applicant_id: str = Field(..., description="Unique identifier")
-    # MUST be Any to accept strings like Gender="Male" and Region="Urban"
     financial_data: Dict[str, Any]
 
 class ChatRequest(BaseModel):
     message: str
+    # NEW: These allow the frontend to pass context to the AI
+    applicant_id: Optional[str] = None
+    shap_context: Optional[str] = None
 
 # 2. OUTPUT SCHEMAS
 class ShapFactor(BaseModel):
